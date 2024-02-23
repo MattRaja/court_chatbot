@@ -1,4 +1,4 @@
-Simple chatbot for retrieving information about American court cases using Pinecone
+Simple chatbot for retrieving information about American court cases using Pinecone and LangChain
 
 Frontend is run with Streamlit
 

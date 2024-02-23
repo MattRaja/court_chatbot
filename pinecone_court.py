@@ -1,5 +1,9 @@
 import pandas as pd
+from langchain.chains import RetrievalQA
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.llms.cohere import Cohere
 from pinecone import Pinecone, PodSpec
+from langchain.vectorstores.pinecone import Pinecone as PineconeVs
 from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 import json
@@ -92,7 +96,9 @@ def get_data(path):
     df = pd.DataFrame(df)
     df.drop_duplicates(keep='first', inplace=True)
 
+    # Convert ids from integers to strings
     df['ID'] = df['ID'].apply(str)
+    # Replace empty fields with Unspecified
     df.fillna({'issue_area': 'Unspecified'}, inplace=True)
 
     return df
@@ -115,12 +121,28 @@ class Streamlit:
                 st.warning(f"Please enter a query.")
             else:
                 try:
-                    vectorized_query = self.model.vectorize_query(self.query)
-                    response = self.pc.query_facts(vectorized_query)
-
-                    st.success(response)
+                    embeds = HuggingFaceEmbeddings(model_name='all-MiniLM-L6-v2')
+                    vectorstore = PineconeVs(self.pc.index, embeds, "facts")
+                    # Initialize the OpenAI module, load and run the Retrieval Q&A chain
+                    llm = Cohere(model="command-light", cohere_api_key="MAZCDW0GYy8veCZxvjKkSbxFUt2ZVpH6RLlypjVq")
+                    qa = RetrievalQA.from_chain_type(llm,
+                                                     chain_type="stuff",
+                                                     retriever=vectorstore.as_retriever(search_kwargs={"k": 1}),
+                                                     return_source_documents=True)
+                    response = qa.invoke(self.query)
+                    structured_response = self.structure_response(response)
+                    st.success(structured_response)
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
+
+    def structure_response(self, response):
+        sources = response['source_documents'][0].dict()
+        name = sources['metadata']['name']
+        year = sources['metadata']['year']
+        structured_response = response['result'] + '\n\n' + sources[
+            'page_content'] + '\n\n' + f"These are details from a case {name} in {year}"
+
+        return structured_response
 
 
 def main():
