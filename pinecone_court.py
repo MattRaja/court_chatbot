@@ -1,4 +1,5 @@
 import pandas as pd
+from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.llms.cohere import Cohere
@@ -139,10 +140,19 @@ class Streamlit:
         sources = response['source_documents'][0].dict()
         name = sources['metadata']['name']
         year = sources['metadata']['year']
-        structured_response = response['result'] + '\n\n' + sources[
-            'page_content'] + '\n\n' + f"These are details from a case {name} in {year}"
+        result = response['result']
+        source = sources['page_content']
 
-        return structured_response
+        prompt_template = PromptTemplate.from_template("""
+        AI: {result} 
+        
+        Source: {source}
+        
+        These are details from a case {name} in {year}
+        """)
+
+        prompt = prompt_template.format(result=result, source=source, name=name, year=year)
+        return prompt
 
 
 def main():
